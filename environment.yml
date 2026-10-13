@@ -1,0 +1,15 @@
+name: senior-project
+channels:
+  - conda-forge
+dependencies:
+  - pip
+  - optuna
+  - matplotlib
+  - scikit-learn
+  - jupyterlab
+  - numpy
+  - ipykernel
+  - python=3.11
+  - pandas
+  - mpi4py
+  - openmpi
