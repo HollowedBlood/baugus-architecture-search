@@ -1,15 +1,58 @@
 ## Chronological data splits
 
-Data is ordered by market date and split across all tickers together. Samples are never randomly shuffled between training, validation, and test sets.
+`shared_data.get_xyts()` returns four CPU PyTorch tensors:
+`X_train`, `y_train`, `X_test`, and `y_test`.
 
-- **Training:** The earliest observations. Model weights, preprocessing statistics, and any data-derived noise-control parameters are fitted using this portion only.
-- **Search validation:** One or more later chronological periods, following their corresponding training periods. These determine early stopping, checkpoint selection, hyperparameter optimization, and finalist selection. If multiple periods are used, training expands forward through time, with each validation period remaining later than its training data.
-- **Final test:** The most recent reserved period. Its labels and performance results are excluded from all search decisions. Finalists and evaluation rules are frozen before this period is evaluated.
+Samples are ordered by market date and split across all tickers together
+using `train_test_split(..., shuffle=False)`. There is currently no separate
+validation set.
 
-At every boundary, training samples whose future target reaches into the next partition are removed. For a five-trading-step prediction horizon, this means purging the final five training prediction dates before validation begins; the same rule applies before the final test period.
+- **Training:** The earlier prediction dates. Model weights are trained on
+  these samples. When scaling is enabled, `StandardScaler` is fitted only
+  on the unique market days included in training input windows.
+- **Test:** The later prediction dates. With `test_size=0.2`, the latest
+  20% of eligible samples are assigned to testing, before training samples
+  are purged at the boundary. This set currently supports development
+  evaluation.
 
-Validation and test input windows may include earlier historical observations, because those would be available at prediction time. Their target outcomes must remain entirely within their respective partitions.
+### Input windows and targets
 
-Every architecture, feature condition, and seed uses the same prediction dates, target definition, and split boundaries. Congressional features become available on their public disclosure date, rather than their transaction date.
+Each input sample contains `lookback` consecutive trading observations,
+ending on its prediction date, for all 20 tickers.
 
-**Exact date boundaries, validation-period count, and partition sizes are pending. They will be recorded in the experiment configuration and this README before the search begins.**
+Each ticker's target is determined by its open-to-open return:
+
+`return = open[prediction_date + horizon] / open[prediction_date] - 1`
+
+Here, `horizon` counts trading observations, not calendar days.
+
+- **0 — Negative:** Return below `-deadzone`.
+- **1 — Neutral:** Return between `-deadzone` and `+deadzone`, inclusive.
+- **2 — Positive:** Return above `+deadzone`.
+
+Training samples are removed if their target date falls on or after the
+first test prediction date. With `horizon=5`, this removes the final five
+otherwise eligible training samples.
+
+Test input windows may include earlier training-period observations:
+these are historical context available at prediction time. Target labels
+are never included in the inputs.
+
+### Feature conditions
+
+- **market:** Six market features per ticker.
+- **congress:** The six market features plus seven daily congressional
+  aggregates per ticker.
+- **noise:** The six market features plus resampled congressional daily
+  vectors, drawn only from days included in training input windows.
+
+Disclosures are assigned to the first market day strictly after their
+filing date, rather than their transaction date.
+
+When scaling is enabled, the same fitted congressional scaler is used
+for actual and resampled congressional features. Target labels always
+use original, unscaled open prices.
+
+For comparisons, the lookback, horizon, deadzone, test size, start date,
+and source data must remain identical across feature conditions.
+The noise seed controls reproducibility of the noise condition.

@@ -1,15 +1,17 @@
 name: senior-project
+
 channels:
   - conda-forge
+
 dependencies:
+  - python=3.11
   - pip
-  - optuna
-  - matplotlib
+  - numpy
+  - pandas
+  - openpyxl
   - scikit-learn
   - jupyterlab
-  - numpy
   - ipykernel
-  - python=3.11
-  - pandas
-  - mpi4py
-  - openmpi
+  - pip:
+      - --index-url https://download.pytorch.org/whl/xpu
+      - torch==2.14.1+xpu
