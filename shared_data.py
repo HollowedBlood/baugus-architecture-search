@@ -214,13 +214,16 @@ def _prepare(condition, test_size, lookback, horizon, deadzone, scale, data_dir,
 	market = raw[first:].reshape(len(dates), len(tickers), len(MARKET_FIELDS))
 	if (market[:, :, :5] <= 0).any() or (market[:, :, 5] < 0).any():
 		raise ValueError("Prices must be positive and volumes nonnegative")
-		
+
 	eligible = np.arange(lookback - 1, len(dates) - horizon)
 	# Split prediction-date indices, preserving order across every ticker.
 	train_idx, test_idx = train_test_split(eligible, test_size=test_size, shuffle=False)
-	train_idx = train_idx[train_idx + horizon < test_idx[0]]
-	if not len(train_idx):
-		raise ValueError("No training samples remain after horizon purging")
+	train_idx, val_idx = train_test_split(train_idx, test_size=0.15, shuffle=False)
+
+	train_idx = train_idx[train_idx + horizon < val_idx[0]]
+	val_idx = val_idx[val_idx + horizon < test_idx[0]]
+	if not len(train_idx) or not len(val_idx):
+		raise ValueError("No training or validation samples remain after horizon purging")
 		
 	# Fit once per unique training input day, not once per repeated lag.
 	training_days = np.zeros(len(dates), dtype=bool)
@@ -274,6 +277,7 @@ def _prepare(condition, test_size, lookback, horizon, deadzone, scale, data_dir,
 		return X, y
 		
 	X_train, y_train = batch(train_idx)
+	X_val, y_val = batch(val_idx)
 	X_test, y_test = batch(test_idx)
 	
 	info = {
@@ -289,7 +293,7 @@ def _prepare(condition, test_size, lookback, horizon, deadzone, scale, data_dir,
 					 "horizon": horizon, "deadzone": deadzone, "scale": scale,
 					 "start": str(dates[0].date()), "noise_seed": noise_seed},
 	}
-	return (X_train, y_train, X_test, y_test), info
+	return (X_train, y_train, X_val, y_val, X_test, y_test), info
 
 
 def get_xyts(condition="market", test_size=0.2, lookback=63, horizon=5,
